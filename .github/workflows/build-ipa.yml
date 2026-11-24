@@ -1,0 +1,61 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync web version into app bundle
+        run: cp web/index.html BankCourse/index.html
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned, iphoneos)
+        run: |
+          set -o pipefail
+          xcodebuild -project BankCourse.xcodeproj \
+            -scheme BankCourse \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -n 40
+
+      - name: Package IPA
+        run: |
+          APP=build/Build/Products/Release-iphoneos/BankCourse.app
+          test -d "$APP" || { echo "BankCourse.app not found"; exit 1; }
+          rm -rf Payload BankCourse.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry BankCourse.ipa Payload
+          ls -lh BankCourse.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BankCourse-ipa
+          path: BankCourse.ipa
+
+      - name: Publish GitHub Release with IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('BankCourse v1.{0}', github.run_number) }}
+          files: BankCourse.ipa
+          make_latest: true
