@@ -15,6 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unzip project archive
+        run: |
+          ZIP=$(ls *.zip | head -n 1)
+          echo "Archive: $ZIP"
+          unzip -o -q "$ZIP" -x '.github/*' '__MACOSX/*'
+          # if the files ended up inside a subfolder, move them to the root
+          if [ ! -f project.yml ]; then
+            DIR=$(dirname "$(find . -name project.yml -not -path './build/*' | head -n 1)")
+            echo "Project found in $DIR"
+            cp -R "$DIR"/. .
+          fi
+          ls -la
+
       - name: Sync web version into app bundle
         run: cp web/index.html BankCourse/index.html
 
